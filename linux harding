@@ -1,0 +1,380 @@
+# Ubuntu 24.04 Security Cheat Sheet
+
+Corrected commands, in the order you should do them. Keep one terminal open while testing changes to SSH or the firewall, and test from a second terminal before closing the first.
+
+---
+
+## 1. Update and reboot
+
+```bash
+sudo apt update && sudo apt upgrade -y
+sudo apt install unattended-upgrades -y
+sudo dpkg-reconfigure --priority=low unattended-upgrades
+sudo reboot
+```
+
+Check for pending security fixes:
+
+```bash
+pro security-status
+```
+
+Ubuntu Pro is free for personal use (up to 5 machines). It patches the Universe packages:
+
+```bash
+sudo pro attach YOUR_TOKEN
+sudo apt update && sudo apt upgrade -y
+```
+
+---
+
+## 2. Stop using root; use a sudo user
+
+```bash
+sudo adduser brown
+sudo usermod -aG sudo brown
+```
+
+List users with sudo rights:
+
+```bash
+getent group sudo
+```
+
+Remove sudo from an account (for example `guest`) or delete the account:
+
+```bash
+sudo deluser guest sudo
+sudo userdel -r guest
+```
+
+Test logging in as the new user before doing anything else. Optionally lock the root password afterwards:
+
+```bash
+sudo passwd -l root
+```
+
+---
+
+## 3. Passwords
+
+Set or change a password:
+
+```bash
+sudo passwd username
+```
+
+Find accounts with an empty password (this should print nothing):
+
+```bash
+sudo awk -F: '($2 == "") {print $1}' /etc/shadow
+```
+
+Enforce complexity:
+
+```bash
+sudo apt install libpam-pwquality -y
+sudo nano /etc/security/pwquality.conf
+```
+
+Set:
+
+```
+minlen = 16
+```
+
+---
+
+## 4. SSH keys
+
+Run this on your **client computer** (not the server, not as root):
+
+```bash
+ssh-keygen -t ed25519
+ssh-copy-id -i ~/.ssh/id_ed25519.pub user@server-ip
+```
+
+Test the key login in a second terminal before continuing.
+
+---
+
+## 5. Harden SSH
+
+```bash
+sudo nano /etc/ssh/sshd_config
+```
+
+Set:
+
+```
+PasswordAuthentication no
+PermitRootLogin no
+PermitEmptyPasswords no
+PubkeyAuthentication yes
+MaxAuthTries 3
+AddressFamily inet
+```
+
+`AddressFamily inet` makes SSH use IPv4 only (optional).
+
+Check for overrides. On Ubuntu 24.04, files in `sshd_config.d` can set `PasswordAuthentication yes` again:
+
+```bash
+sudo grep -ri PasswordAuthentication /etc/ssh/
+```
+
+Check the syntax and restart:
+
+```bash
+sudo sshd -t
+sudo systemctl restart ssh
+```
+
+If `[::]:22` still shows up in `sudo ss -tlnp | grep :22`, run `sudo systemctl edit ssh.socket` and add:
+
+```
+[Socket]
+ListenStream=
+ListenStream=0.0.0.0:22
+```
+
+Then:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl restart ssh.socket ssh
+```
+
+---
+
+## 6. Disable IPv6 system-wide (optional)
+
+Do **not** put these lines in `sshd_config`. They belong in sysctl:
+
+```bash
+sudo nano /etc/sysctl.conf
+```
+
+Add at the end:
+
+```
+# disable IPv6 on the system
+net.ipv6.conf.all.disable_ipv6=1
+net.ipv6.conf.default.disable_ipv6=1
+```
+
+Apply and verify:
+
+```bash
+sudo sysctl -p
+cat /proc/sys/net/ipv6/conf/all/disable_ipv6     # should print 1
+```
+
+Then set `IPV6=no` in `/etc/default/ufw` and run `sudo ufw reload`.
+
+---
+
+## 7. FTP (vsftpd)
+
+Best option: remove it and use SFTP (built into SSH):
+
+```bash
+sudo apt remove --purge vsftpd
+```
+
+If you keep it, edit `/etc/vsftpd.conf`:
+
+```
+anonymous_enable=NO
+local_enable=YES
+write_enable=YES
+local_umask=022
+chroot_local_user=YES
+allow_writeable_chroot=YES
+
+# only listed users may log in
+userlist_enable=YES
+userlist_deny=NO
+userlist_file=/etc/vsftpd.userlist
+
+# encryption
+ssl_enable=YES
+force_local_logins_ssl=YES
+force_local_data_ssl=YES
+ssl_tlsv1=NO
+ssl_tlsv1_1=NO
+ssl_tlsv1_2=YES
+require_ssl_reuse=NO
+```
+
+Delete these old lines:
+
+```
+anon_upload_enable=YES
+anon_other_write_enable=YES
+anon_mkdir_write_enable=YES
+anon_root=/srv/ftp/uploads
+anon_umask=000
+```
+
+Create the allowed-users list (never include `guest`) and restart:
+
+```bash
+echo "sheldon" | sudo tee /etc/vsftpd.userlist
+sudo systemctl restart vsftpd
+```
+
+---
+
+## 8. Samba (Windows file sharing)
+
+Best option: remove it if you don't need it.
+
+```bash
+sudo systemctl disable --now smbd nmbd
+sudo apt remove --purge samba
+```
+
+If you keep it, edit `/etc/samba/smb.conf`:
+
+- **Delete the whole `[public]` block.** It shared `/` as root with no password.
+- Under `[global]`, set:
+
+```
+map to guest = never
+restrict anonymous = 2
+usershare allow guests = no
+server min protocol = SMB2
+```
+
+- Safe example share:
+
+```
+[shared]
+   path = /srv/samba/shared
+   valid users = sheldon
+   read only = no
+   guest ok = no
+```
+
+```bash
+sudo mkdir -p /srv/samba/shared
+sudo smbpasswd -a sheldon
+testparm
+sudo systemctl restart smbd
+```
+
+---
+
+## 9. Firewall (UFW)
+
+Add the SSH rule **before** enabling, or you will lock yourself out. SSH is port **22**.
+
+```bash
+sudo ufw default deny incoming
+sudo ufw default allow outgoing
+sudo ufw limit 22/tcp
+```
+
+Only if you run a web server:
+
+```bash
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+```
+
+Block the risky services:
+
+```bash
+sudo ufw deny 21/tcp
+sudo ufw deny 139/tcp
+sudo ufw deny 445/tcp
+```
+
+Enable and check:
+
+```bash
+sudo ufw enable
+sudo ufw status verbose
+```
+
+Stricter alternative for SSH (only your home network; adjust the subnet):
+
+```bash
+sudo ufw allow from 192.168.1.0/24 to any port 22 proto tcp
+```
+
+Check what is listening (close anything you don't recognize):
+
+```bash
+sudo ss -tulpn
+```
+
+**Docker bypasses UFW.** Publish ports as `127.0.0.1:8080:80` unless they must be public.
+
+---
+
+## 10. fail2ban
+
+```bash
+sudo apt install fail2ban -y
+sudo nano /etc/fail2ban/jail.local
+```
+
+Add:
+
+```
+[sshd]
+enabled = true
+maxretry = 5
+bantime = 1h
+```
+
+```bash
+sudo systemctl enable --now fail2ban
+sudo systemctl restart fail2ban
+sudo fail2ban-client status sshd
+```
+
+---
+
+## 11. Clean up
+
+```bash
+sudo apt remove --purge debsecan postfix -y
+sudo apt autoremove -y
+```
+
+---
+
+## 12. Check for a past compromise
+
+The old Samba `[public]` share gave anyone root access to `/` without a password, so check:
+
+```bash
+cat /root/.ssh/authorized_keys ~/.ssh/authorized_keys     # keys you don't recognize
+sudo crontab -l; ls -la /etc/cron.* /var/spool/cron/crontabs
+sudo awk -F: '($3==0){print $1}' /etc/passwd              # should only print root
+last -20
+sudo lastb | head
+ps aux --sort=-%cpu | head                                 # unknown CPU hogs
+sudo find / -mtime -14 -type f -perm -4000 2>/dev/null     # recently changed SUID files
+```
+
+If you find signs of compromise, back up only your data and reinstall.
+
+---
+
+## 13. Audit and monitor
+
+```bash
+sudo apt install lynis rkhunter -y
+sudo lynis audit system
+sudo rkhunter --update && sudo rkhunter --check
+
+sudo snap install trivy
+sudo trivy rootfs --severity HIGH,CRITICAL /
+```
+
+---
+9. Run Lynis and Trivy

@@ -114,6 +114,8 @@ curl -i "http://<target-host>/api/orders/2?view=shadow&depth=2"
 
 on fetc :2?view=shadow&depth=2
 
+seventh: 
+/challenges/cold-archive/files/backup.sql
  
 
 

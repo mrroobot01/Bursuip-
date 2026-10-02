@@ -1,4 +1,5 @@
-# Ubuntu 24.04 Security Cheat Sheet
+
+secure your linux 
 
 Corrected commands, in the order you should do them. Keep one terminal open while testing changes to SSH or the firewall, and test from a second terminal before closing the first.
 

